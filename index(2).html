@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Molasses Rescue Strategy</title>
+  <style>
+    :root {
+      --bg: #f3dfbd;
+      --panel: #fff8ea;
+      --ink: #2a190f;
+      --line: #d3b184;
+      --molasses: #4a2918;
+      --accent: #a65a24;
+      --green: #26734d;
+      --blue: #2d6798;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--ink);
+      background: linear-gradient(#fff1d7, #e8c894);
+    }
+
+    header {
+      background: #352014;
+      color: white;
+      text-align: center;
+      padding: 18px;
+    }
+
+    header h1 {
+      margin: 0 0 5px;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+    }
+
+    header p { margin: 0; }
+
+    main {
+      max-width: 1150px;
+      margin: auto;
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 2px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+
+    .game-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 760px) minmax(260px, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .game-layout { grid-template-columns: 1fr; }
+    }
+
+    canvas {
+      width: 100%;
+      background: #dfbf8b;
+      border: 4px solid #352014;
+      border-radius: 12px;
+      display: block;
+      touch-action: manipulation;
+    }
+
+    .hud {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .stat {
+      background: #fffdf7;
+      border: 1px solid #dcc195;
+      border-radius: 10px;
+      padding: 8px;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(100px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 10px;
+      font-weight: bold;
+      color: white;
+      cursor: pointer;
+      background: var(--accent);
+      box-shadow: 0 3px 0 #703511;
+    }
+
+    button:hover { filter: brightness(1.08); }
+    button:active { transform: translateY(2px); box-shadow: 0 1px 0 #703511; }
+
+    button.active {
+      background: var(--blue);
+      box-shadow: 0 3px 0 #173a5a;
+    }
+
+    button.end { background: #5b3b26; box-shadow: 0 3px 0 #2c1b10; }
+    button.restart { background: #7c2b1e; box-shadow: 0 3px 0 #411008; }
+
+    .fact-box {
+      background: #fffdf7;
+      border-left: 7px solid var(--accent);
+      border-radius: 10px;
+      min-height: 82px;
+      padding: 12px;
+      line-height: 1.35;
+    }
+
+    .log {
+      background: #fffdf7;
+      border: 1px solid #dcc195;
+      border-radius: 10px;
+      padding: 10px;
+      max-height: 205px;
+      overflow: auto;
+      line-height: 1.4;
+      font-size: 0.95rem;
+    }
+
+    .log p { margin: 0 0 8px; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 14px;
+    }
+
+    ul { line-height: 1.45; padding-left: 20px; }
+    a { color: #6d370b; font-weight: bold; }
+    .small { font-size: 0.92rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Molasses Rescue Strategy</h1>
+    <p>A turn-based strategy game about the Great Molasses Flood of 1919</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="game-layout">
+        <div>
+          <div class="hud">
+            <div class="stat" id="turnStat">Turn: 1</div>
+            <div class="stat" id="apStat">Actions: 5 / 5</div>
+            <div class="stat" id="rescueStat">Rescued: 0 / 5</div>
+            <div class="stat" id="lostStat">Caught by flood: 0</div>
+          </div>
+
+          <canvas id="game" width="704" height="448" aria-label="Molasses Rescue Strategy grid"></canvas>
+
+          <div class="controls">
+            <button id="moveBtn" class="active">Move</button>
+            <button id="rescueBtn">Rescue</button>
+            <button id="barrierBtn">Build Barrier</button>
+            <button id="endBtn" class="end">End Turn</button>
+            <button id="restartBtn" class="restart">Restart</button>
+          </div>
+        </div>
+
+        <aside>
+          <h2>Mission</h2>
+          <div class="fact-box" id="message">
+            Use your action points to move, rescue people, and build barriers before the molasses spreads.
+          </div>
+
+          <h2>Strategy Log</h2>
+          <div class="log" id="log"></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="two-col">
+      <div class="card">
+        <h2>How to Play</h2>
+        <ul>
+          <li><strong>Move:</strong> click a nearby square. Cost: 1 action.</li>
+          <li><strong>Rescue:</strong> stand on or next to a person. Cost: 1 action.</li>
+          <li><strong>Build Barrier:</strong> click a nearby empty square. Cost: 2 actions.</li>
+          <li><strong>End Turn:</strong> molasses spreads after your turn.</li>
+          <li><strong>Win:</strong> rescue everyone you can, then return to the green safe zone.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Strategy Tips</h2>
+        <ul>
+          <li>Do not spend every turn running. Sometimes a barrier buys more time.</li>
+          <li>Rescue people near the left side early because the flood starts there.</li>
+          <li>Use buildings as natural blockers and place barriers in narrow paths.</li>
+          <li>The molasses spreads faster as turns pass, so plan routes before moving.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="card small">
+      <h2>Sources Used</h2>
+      <ul>
+        <li><a href="https://www.boston.gov/news/100-years-ago-today-molasses-crashes-through-bostons-north-end" target="_blank" rel="noopener">Boston.gov — 100 Years Ago Today: Molasses Crashes Through Boston's North End</a></li>
+        <li><a href="https://www.bpl.org/blogs/post/bostons-great-molasses-flood/" target="_blank" rel="noopener">BPL.org — Boston’s Great Molasses Flood</a></li>
+        <li><a href="https://www.masshist.org/events/series/molasses-flood" target="_blank" rel="noopener">MassHist.org — The Great Molasses Flood Revisited</a></li>
+        <li><a href="https://www.nps.gov/planyourvisit/event-details.htm?id=77CBFCF8-0695-F02E-82BB84BDAE450E38" target="_blank" rel="noopener">NPS.gov — Mystery, Mayhem, and Molasses</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const turnStat = document.getElementById("turnStat");
+    const apStat = document.getElementById("apStat");
+    const rescueStat = document.getElementById("rescueStat");
+    const lostStat = document.getElementById("lostStat");
+    const message = document.getElementById("message");
+    const logBox = document.getElementById("log");
+
+    const moveBtn = document.getElementById("moveBtn");
+    const rescueBtn = document.getElementById("rescueBtn");
+    const barrierBtn = document.getElementById("barrierBtn");
+    const endBtn = document.getElementById("endBtn");
+    const restartBtn = document.getElementById("restartBtn");
+
+    const COLS = 11;
+    const ROWS = 7;
+    const TILE = 64;
+    const MAX_AP = 5;
+
+    const facts = [
+      "Fact: The flood happened on January 15, 1919, in Boston’s North End.",
+      "Fact: The tank held about 2.3 million gallons of molasses.",
+      "Fact: The molasses wave was estimated to reach about 15 feet high.",
+      "Fact: The disaster killed 21 people and injured about 150.",
+      "Fact: The tragedy became important because it showed the need for stronger industrial safety and building oversight."
+    ];
+
+    let mode;
+    let turn;
+    let ap;
+    let team;
+    let people;
+    let molasses;
+    let barriers;
+    let rubble;
+    let gameOver;
+    let selectedMessage;
+
+    function key(x, y) { return `${x},${y}`; }
+    function fromKey(k) { return k.split(",").map(Number); }
+    function inBounds(x, y) { return x >= 0 && x < COLS && y >= 0 && y < ROWS; }
+    function manhattan(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
+    function isSafeZone(x, y) { return x === COLS - 1; }
+    function hasMolasses(x, y) { return molasses.has(key(x, y)); }
+    function hasRubble(x, y) { return rubble.has(key(x, y)); }
+    function getBarrier(x, y) { return barriers.get(key(x, y)); }
+    function livingPeople() { return people.filter(p => !p.rescued && !p.lost); }
+    function rescuedCount() { return people.filter(p => p.rescued).length; }
+    function lostCount() { return people.filter(p => p.lost).length; }
+
+    function addLog(text) {
+      const p = document.createElement("p");
+      p.textContent = text;
+      logBox.prepend(p);
+    }
+
+    function setMode(newMode) {
+      mode = newMode;
+      moveBtn.classList.toggle("active", mode === "move");
+      rescueBtn.classList.toggle("active", mode === "rescue");
+      barrierBtn.classList.toggle("active", mode === "barrier");
+
+      if (mode === "move") selectedMessage = "Move mode: click a nearby open square. Moving costs 1 action.";
+      if (mode === "rescue") selectedMessage = "Rescue mode: click a person on or next to your team. Rescue costs 1 action.";
+      if (mode === "barrier") selectedMessage = "Barrier mode: click a nearby empty square. A barrier costs 2 actions and slows the flood.";
+      updateHUD();
+    }
+
+    function resetGame() {
+      mode = "move";
+      turn = 1;
+      ap = MAX_AP;
+      gameOver = false;
+      selectedMessage = "Use your action points to move, rescue people, and build barriers before the molasses spreads.";
+
+      team = { x: 10, y: 3 };
+
+      people = [
+        { x: 2, y: 1, rescued: false, lost: false, fact: facts[0], name: "dock worker" },
+        { x: 2, y: 5, rescued: false, lost: false, fact: facts[1], name: "shop owner" },
+        { x: 5, y: 1, rescued: false, lost: false, fact: facts[2], name: "messenger" },
+        { x: 6, y: 5, rescued: false, lost: false, fact: facts[3], name: "wagon driver" },
+        { x: 8, y: 3, rescued: false, lost: false, fact: facts[4], name: "student reporter" }
+      ];
+
+      molasses = new Set([key(0, 2), key(0, 3), key(0, 4)]);
+
+      barriers = new Map();
+
+      rubble = new Set([
+        key(3, 0), key(3, 3), key(3, 6),
+        key(5, 3),
+        key(7, 1), key(7, 5)
+      ]);
+
+      logBox.innerHTML = "";
+      addLog("Game started. The rescue team begins at the green safe zone.");
+      setMode("move");
+      updateHUD();
+      draw();
+    }
+
+    function updateHUD() {
+      turnStat.textContent = `Turn: ${turn}`;
+      apStat.textContent = `Actions: ${ap} / ${MAX_AP}`;
+      rescueStat.textContent = `Rescued: ${rescuedCount()} / ${people.length}`;
+      lostStat.textContent = `Caught by flood: ${lostCount()}`;
+      message.textContent = selectedMessage;
+    }
+
+    function passableForTeam(x, y) {
+      if (!inBounds(x, y)) return false;
+      if (hasMolasses(x, y)) return false;
+      if (hasRubble(x, y)) return false;
+      if (getBarrier(x, y)) return false;
+      return true;
+    }
+
+    function canBuildBarrier(x, y) {
+      if (!inBounds(x, y)) return false;
+      if (isSafeZone(x, y)) return false;
+      if (hasMolasses(x, y)) return false;
+      if (hasRubble(x, y)) return false;
+      if (getBarrier(x, y)) return false;
+      if (team.x === x && team.y === y) return false;
+      if (people.some(p => !p.rescued && !p.lost && p.x === x && p.y === y)) return false;
+      return true;
+    }
+
+    function personAtOrNear(x, y) {
+      return people.find(p => !p.rescued && !p.lost && p.x === x && p.y === y && manhattan(team, p) <= 1);
+    }
+
+    function handleClick(event) {
+      if (gameOver) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = Math.floor((event.clientX - rect.left) * scaleX / TILE);
+      const y = Math.floor((event.clientY - rect.top) * scaleY / TILE);
+
+      if (!inBounds(x, y)) return;
+
+      if (mode === "move") {
+        if (ap < 1) {
+          selectedMessage = "You are out of actions. End your turn.";
+        } else if (manhattan(team, {x, y}) !== 1) {
+          selectedMessage = "You can only move one square at a time.";
+        } else if (!passableForTeam(x, y)) {
+          selectedMessage = "That square is blocked by molasses, rubble, or a barrier.";
+        } else {
+          team.x = x;
+          team.y = y;
+          ap -= 1;
+          selectedMessage = "Moved. Now rescue, build a barrier, or keep moving.";
+          addLog(`Turn ${turn}: team moved to (${x + 1}, ${y + 1}).`);
+        }
+      }
+
+      if (mode === "rescue") {
+        const target = people.find(p => !p.rescued && !p.lost && p.x === x && p.y === y && manhattan(team, p) <= 1);
+        if (ap < 1) {
+          selectedMessage = "You are out of actions. End your turn.";
+        } else if (!target) {
+          selectedMessage = "Click a person who is on or next to the rescue team.";
+        } else {
+          target.rescued = true;
+          ap -= 1;
+          selectedMessage = `You rescued the ${target.name}. ${target.fact}`;
+          addLog(`Turn ${turn}: rescued the ${target.name}.`);
+        }
+      }
+
+      if (mode === "barrier") {
+        if (ap < 2) {
+          selectedMessage = "Building a barrier costs 2 actions. You do not have enough actions.";
+        } else if (manhattan(team, {x, y}) !== 1) {
+          selectedMessage = "You can only build a barrier next to your team.";
+        } else if (!canBuildBarrier(x, y)) {
+          selectedMessage = "You cannot build a barrier there.";
+        } else {
+          barriers.set(key(x, y), { hp: 2 });
+          ap -= 2;
+          selectedMessage = "Barrier built. It can block the molasses for about two flood hits.";
+          addLog(`Turn ${turn}: built a barrier at (${x + 1}, ${y + 1}).`);
+        }
+      }
+
+      checkWin();
+      updateHUD();
+      draw();
+    }
+
+    function endTurn() {
+      if (gameOver) return;
+      selectedMessage = "The molasses spreads...";
+      spreadMolasses();
+
+      if (!gameOver) {
+        turn += 1;
+        ap = MAX_AP;
+        selectedMessage = "New turn. Plan carefully before the flood spreads again.";
+        addLog(`Turn ${turn} begins. Actions restored.`);
+        checkWin();
+      }
+
+      updateHUD();
+      draw();
+    }
+
+    function spreadMolasses() {
+      const damaged = new Set();
+      const candidates = new Map();
+
+      for (const k of molasses) {
+        const [x, y] = fromKey(k);
+        const neighbors = [
+          {x: x + 1, y}, {x: x - 1, y},
+          {x, y: y + 1}, {x, y: y - 1}
+        ];
+
+        for (const n of neighbors) {
+          if (!inBounds(n.x, n.y)) continue;
+          const nk = key(n.x, n.y);
+          if (molasses.has(nk) || hasRubble(n.x, n.y)) continue;
+
+          const barrier = barriers.get(nk);
+          if (barrier) {
+            damaged.add(nk);
+            continue;
+          }
+
+          candidates.set(nk, n);
+        }
+      }
+
+      for (const bk of damaged) {
+        const b = barriers.get(bk);
+        if (!b) continue;
+        b.hp -= 1;
+        const [bx, by] = fromKey(bk);
+        if (b.hp <= 0) {
+          barriers.delete(bk);
+          addLog(`Turn ${turn}: a barrier at (${bx + 1}, ${by + 1}) broke.`);
+        } else {
+          addLog(`Turn ${turn}: a barrier at (${bx + 1}, ${by + 1}) held back the molasses.`);
+        }
+      }
+
+      const peopleTargets = livingPeople();
+      const amount = Math.min(2 + Math.floor(turn / 3), 5);
+
+      const sorted = Array.from(candidates.values()).sort((a, b) => {
+        const aPeopleDist = peopleTargets.length ? Math.min(...peopleTargets.map(p => manhattan(a, p))) : 99;
+        const bPeopleDist = peopleTargets.length ? Math.min(...peopleTargets.map(p => manhattan(b, p))) : 99;
+
+        // Flood generally pushes right, but it also threatens nearby people.
+        const scoreA = a.x * 2 - aPeopleDist;
+        const scoreB = b.x * 2 - bPeopleDist;
+        return scoreB - scoreA;
+      });
+
+      const newTiles = sorted.slice(0, amount);
+      for (const t of newTiles) {
+        molasses.add(key(t.x, t.y));
+
+        const victim = people.find(p => !p.rescued && !p.lost && p.x === t.x && p.y === t.y);
+        if (victim) {
+          victim.lost = true;
+          addLog(`Turn ${turn}: the ${victim.name} was cut off by the flood.`);
+        }
+
+        if (team.x === t.x && team.y === t.y) {
+          gameOver = true;
+          selectedMessage = "Game over: the rescue team was cut off by the flood. Restart and use more barriers or a faster route.";
+          addLog(`Turn ${turn}: the rescue team was cut off.`);
+        }
+      }
+    }
+
+    function checkWin() {
+      if (gameOver) return;
+      const allPeopleDone = people.every(p => p.rescued || p.lost);
+      if (allPeopleDone && isSafeZone(team.x, team.y)) {
+        gameOver = true;
+        const rescued = rescuedCount();
+        if (rescued === people.length) {
+          selectedMessage = "Victory: everyone was rescued and the team returned to safety!";
+        } else {
+          selectedMessage = `Mission complete: ${rescued} out of ${people.length} people were rescued. Try again for a perfect rescue.`;
+        }
+        addLog("Game finished. The team reached the safe zone.");
+      } else if (people.every(p => p.rescued) && !isSafeZone(team.x, team.y)) {
+        selectedMessage = "Everyone is rescued. Return the team to the green safe zone to finish.";
+      }
+    }
+
+    function drawGrid() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const px = x * TILE;
+          const py = y * TILE;
+
+          ctx.fillStyle = isSafeZone(x, y) ? "#cbe8d6" : ((x + y) % 2 === 0 ? "#e2c392" : "#d9b782");
+          ctx.fillRect(px, py, TILE, TILE);
+
+          if (x === 0 && (y === 2 || y === 3 || y === 4)) {
+            ctx.fillStyle = "#8c4a23";
+            ctx.fillRect(px + 7, py + 7, TILE - 14, TILE - 14);
+            ctx.fillStyle = "white";
+            ctx.font = "bold 10px Arial";
+            ctx.fillText("TANK", px + 17, py + 36);
+          }
+
+          if (hasRubble(x, y)) {
+            ctx.fillStyle = "#76593f";
+            ctx.fillRect(px + 8, py + 8, TILE - 16, TILE - 16);
+            ctx.fillStyle = "#b39978";
+            ctx.fillRect(px + 16, py + 16, 12, 12);
+            ctx.fillRect(px + 34, py + 30, 16, 12);
+          }
+
+          if (hasMolasses(x, y)) {
+            ctx.fillStyle = "#4a2918";
+            ctx.beginPath();
+            ctx.roundRect(px + 3, py + 3, TILE - 6, TILE - 6, 12);
+            ctx.fill();
+
+            ctx.fillStyle = "rgba(255,255,255,0.15)";
+            ctx.beginPath();
+            ctx.arc(px + 22, py + 22, 7, 0, Math.PI * 2);
+            ctx.arc(px + 43, py + 39, 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          const barrier = getBarrier(x, y);
+          if (barrier) {
+            ctx.fillStyle = "#c8964b";
+            ctx.fillRect(px + 9, py + 14, TILE - 18, TILE - 28);
+            ctx.strokeStyle = "#6b3a14";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(px + 9, py + 14, TILE - 18, TILE - 28);
+            ctx.fillStyle = "#2a190f";
+            ctx.font = "bold 13px Arial";
+            ctx.fillText(`HP ${barrier.hp}`, px + 16, py + 38);
+          }
+
+          ctx.strokeStyle = "rgba(53, 32, 20, 0.25)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(px, py, TILE, TILE);
+        }
+      }
+
+      // Safe zone label
+      ctx.fillStyle = "#26734d";
+      ctx.font = "bold 15px Arial";
+      ctx.save();
+      ctx.translate((COLS - 1) * TILE + 22, TILE * 6 - 10);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText("SAFE ZONE", 0, 0);
+      ctx.restore();
+    }
+
+    function drawPeople() {
+      for (const p of people) {
+        if (p.rescued || p.lost) continue;
+
+        const px = p.x * TILE;
+        const py = p.y * TILE;
+
+        // help sign
+        ctx.fillStyle = "#ffd45c";
+        ctx.fillRect(px + 10, py + 4, 44, 18);
+        ctx.strokeStyle = "#6b3a14";
+        ctx.strokeRect(px + 10, py + 4, 44, 18);
+        ctx.fillStyle = "#2a190f";
+        ctx.font = "bold 10px Arial";
+        ctx.fillText("HELP", px + 17, py + 17);
+
+        // person
+        ctx.fillStyle = "#f2c28d";
+        ctx.beginPath();
+        ctx.arc(px + 32, py + 32, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#7b4faa";
+        ctx.fillRect(px + 23, py + 41, 18, 17);
+
+        ctx.fillStyle = "#2a190f";
+        ctx.font = "bold 16px Arial";
+        ctx.fillText("!", px + 29, py + 54);
+      }
+    }
+
+    function drawTeam() {
+      const px = team.x * TILE;
+      const py = team.y * TILE;
+
+      // range highlight
+      ctx.fillStyle = "rgba(45, 103, 152, 0.14)";
+      const spots = [
+        {x: team.x, y: team.y},
+        {x: team.x + 1, y: team.y},
+        {x: team.x - 1, y: team.y},
+        {x: team.x, y: team.y + 1},
+        {x: team.x, y: team.y - 1}
+      ];
+      for (const s of spots) {
+        if (inBounds(s.x, s.y)) ctx.fillRect(s.x * TILE + 3, s.y * TILE + 3, TILE - 6, TILE - 6);
+      }
+
+      // body
+      ctx.fillStyle = "#2d6798";
+      ctx.fillRect(px + 21, py + 29, 22, 25);
+
+      // head
+      ctx.fillStyle = "#f2c28d";
+      ctx.beginPath();
+      ctx.arc(px + 32, py + 23, 9, 0, Math.PI * 2);
+      ctx.fill();
+
+      // helmet
+      ctx.fillStyle = "#ffd45c";
+      ctx.fillRect(px + 21, py + 13, 22, 8);
+
+      // cross
+      ctx.fillStyle = "white";
+      ctx.fillRect(px + 29, py + 35, 6, 14);
+      ctx.fillRect(px + 25, py + 39, 14, 6);
+    }
+
+    function drawModeHints() {
+      if (gameOver) {
+        ctx.fillStyle = "rgba(42,25,15,0.72)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.font = "bold 28px Arial";
+        ctx.fillText(selectedMessage.startsWith("Victory") ? "Victory!" : "Mission Ended", canvas.width / 2, 205);
+        ctx.font = "17px Arial";
+        ctx.fillText(selectedMessage, canvas.width / 2, 240);
+        ctx.fillText("Press Restart to play again.", canvas.width / 2, 270);
+        ctx.textAlign = "left";
+      }
+    }
+
+    function draw() {
+      drawGrid();
+      drawPeople();
+      drawTeam();
+      drawModeHints();
+    }
+
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+      CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        if (w < 2 * r) r = w / 2;
+        if (h < 2 * r) r = h / 2;
+        this.beginPath();
+        this.moveTo(x + r, y);
+        this.arcTo(x + w, y, x + w, y + h, r);
+        this.arcTo(x + w, y + h, x, y + h, r);
+        this.arcTo(x, y + h, x, y, r);
+        this.arcTo(x, y, x + w, y, r);
+        this.closePath();
+        return this;
+      }
+    }
+
+    canvas.addEventListener("click", handleClick);
+    moveBtn.addEventListener("click", () => setMode("move"));
+    rescueBtn.addEventListener("click", () => setMode("rescue"));
+    barrierBtn.addEventListener("click", () => setMode("barrier"));
+    endBtn.addEventListener("click", endTurn);
+    restartBtn.addEventListener("click", resetGame);
+
+    resetGame();
+  </script>
+</body>
+</html>
